@@ -7,6 +7,8 @@ import feedparser
 import os
 from discord.utils import find
 from dotenv import load_dotenv
+import html
+from bs4 import BeautifulSoup
 
 bot = commands.Bot(command_prefix='!', intents=discord.Intents.all())
 
@@ -106,7 +108,7 @@ async def on_message(message):
         last_message[message.author.id] = datetime.datetime.now()
         messages_since_last_referral[message.author.id] = 0
         if not has_higher_level_role:
-            required_messages[message.author.id] = random.randint(50, 75)
+            required_messages[message.author.id] = random.randint(25, 30)
 
         data["last_message"] = {str(user_id): timestamp.isoformat() for user_id, timestamp in last_message.items()}
         data["messages_since_last_referral"] = messages_since_last_referral
@@ -271,19 +273,26 @@ async def check_rss_feed():
                 # Extract info
                 title = entry.get("title", "No title")
                 link = entry.get("link", "")
-                summary = entry.get("summary", "")
+
+                # Attempt to get the raw summary
+                raw_summary = entry.get("summary", "")
+                # 1) Decode HTML entities
+                decoded_summary = html.unescape(raw_summary)
+                # 2) Strip any HTML tags
+                cleaned_summary = BeautifulSoup(decoded_summary, "html.parser").get_text()
+
                 published = entry.get("published", "")
 
                 # Optional summary truncation if needed
                 max_length = 2000
-                if len(summary) > max_length:
-                    summary = summary[:max_length] + "..."
+                if len(cleaned_summary) > max_length:
+                    cleaned_summary = cleaned_summary[:max_length] + "..."
 
                 # Create an Embed
                 embed = discord.Embed(
                     title=title,
                     url=link,
-                    description=summary,
+                    description=cleaned_summary,
                     color=0x9B59B6
                 )
                 embed.set_author(name="Doctor Of Credit")
