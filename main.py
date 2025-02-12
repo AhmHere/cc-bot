@@ -9,8 +9,9 @@ from discord.utils import find
 from dotenv import load_dotenv
 import html
 from bs4 import BeautifulSoup
+import re
 
-bot = commands.Bot(command_prefix='+', intents=discord.Intents.all())
+bot = commands.Bot(command_prefix='!', intents=discord.Intents.all())
 
 RULES_CHANNEL_ID = 932447065370398791
 REFERRALS_CHANNEL_ID = 1105204207172190368
@@ -18,29 +19,46 @@ DISCORD_LOGS_CHANNEL_ID = 1105328983245082725
 NEEDS_HELP_CHANNEL_ID = 1105328983245082725
 COOLDOWN_TIME = 7*24*60*60
 GUILD_ID = 931760921825665034
-NEWS_CHANNEL_ID = 1337930618402770985 # RSS Feed Channel
-RSS_FEED_URL = 'https://www.doctorofcredit.com/feed/' #RSS Feed URL for DOC
+# RSS Feed Configurations
+RSS_FEEDS = {
+    1337930618402770985: ("https://www.doctorofcredit.com/feed/", "Doctor Of Credit", 0x9B59B6),
+    1338649589191934042: ("https://dannydealguru.com/feed/", "Danny The Deal Guru", 0x3498DB),
+    1338649732771221624: ("https://onemileatatime.com/feed/", "One Mile At A Time", 0xE74C3C),
+}
+
 DATA_FILE = "data.json"
 STORAGE_FILE = "posted_entries.json"
 
 # Load RSS Feed Entry Data
 def load_posted_entries():
     if not os.path.exists(STORAGE_FILE):
-        return set()
-    else:
-        with open(STORAGE_FILE, "r", encoding="utf-8") as f:
-            try:
-                data = json.load(f)
-                return set(data)
-            except json.JSONDecodeError:
-                return set()
+        return {}  # Return an empty dictionary if file doesn't exist
+
+    with open(STORAGE_FILE, "r", encoding="utf-8") as f:
+        try:
+            data = json.load(f)
+            return data  # Returns a dictionary
+        except json.JSONDecodeError:
+            return {}  # Return empty dict if JSON is invalid
 
 def save_posted_entries(entries):
     with open(STORAGE_FILE, "w", encoding="utf-8") as f:
-        json.dump(list(entries), f, indent=4)
+        json.dump(entries, f, indent=4)
 
-# Initialize global set from JSON
-posted_entries = load_posted_entries()
+
+# Add a new entry to the tracking file
+def add_new_entry(channel_id, entry_id):
+    posted_entries = load_posted_entries()
+    
+    # Ensure the channel ID exists in the dictionary
+    if str(channel_id) not in posted_entries:
+        posted_entries[str(channel_id)] = []  # Initialize empty list
+
+    # Add the new entry if not already posted
+    if entry_id not in posted_entries[str(channel_id)]:
+        posted_entries[str(channel_id)].append(entry_id)
+
+    save_posted_entries(posted_entries)  # Save updated entries
 
 # Load Diamond Member Data from JSON file
 def load_data():
@@ -68,68 +86,78 @@ confirmation_sent = {int(user_id): datetime.datetime.fromisoformat(timestamp) fo
 @bot.event
 async def on_ready():
     print(f'{bot.user} has connected to Discord!')
-    await create_rules_message()
-    # Start the background loop
-    check_rss_feed.start()
-    
+
+    await create_rules_message() # Waits for Rules Message to post in #Rules channel
+
+    if not check_rss_feeds.is_running():  # Prevent multiple starts if bot reconnects
+        check_rss_feeds.start()
+
+# (Merged Message Deletion For Referals & Link Filtering)
 @bot.event
 async def on_message(message):
-    if isinstance(message.author, discord.Member):
-        diamond_status_role = find(lambda r: r.name == "Diamond Status", message.author.roles)
-        diamond_role = find(lambda r: r.name == "Diamond", message.author.roles)
-        has_higher_level_role = any([find(lambda r: r.name == f"Level {i}", message.author.roles) for i in range(10, 31, 10)])
-    else:
-        diamond_status_role = None
-        diamond_role = None
-        has_higher_level_role = False
+    if message.author.bot:
+        return
 
-    if message.channel.id == REFERRALS_CHANNEL_ID:
+    if isinstance(message.channel, discord.DMChannel):
+        await process_diamond_member_reply(message)
+        return
 
-        is_moderator = any([role.name == "Moderator" for role in message.author.roles])
+    if message.guild:
+        guild = message.guild
+        member = guild.get_member(message.author.id)
 
-        if not is_moderator and message.author.id in last_message:
-            if (datetime.datetime.now() - last_message[message.author.id]).total_seconds() < COOLDOWN_TIME:
-                await message.delete()
+        if not member:
+            return
 
-                if message.author == bot.user:
-                    return
+        # Referrals message deletion
+        if message.channel.id == REFERRALS_CHANNEL_ID:
+            is_moderator = any(role.name == "Moderator" for role in message.author.roles)
 
-                user = await bot.fetch_user(message.author.id)
-                await user.send(f"{message.author.mention}, You can only post once in 7 days in the #referrals channel. Your message has been deleted and you can post again after {datetime.datetime.fromtimestamp((last_message[message.author.id] + datetime.timedelta(seconds=COOLDOWN_TIME)).timestamp()).strftime('%Y-%m-%d %H:%M:%S')} UTC time.")
-                return
+            if not is_moderator and message.author.id in last_message:
+                time_since_last_post = (datetime.datetime.now() - last_message[message.author.id]).total_seconds()
 
-            if not has_higher_level_role and messages_since_last_referral.get(message.author.id, 0) < required_messages.get(message.author.id, 50) and diamond_role:
-                await message.delete()
-                await message.author.remove_roles(diamond_role)
-                user = await bot.fetch_user(message.author.id)
-                await user.send("Your Diamond role has been removed because you were not active enough. Become active again and you will regain the Diamond role.")
-                return
+                if time_since_last_post < COOLDOWN_TIME:
+                    try:
+                        await message.delete()
+                        user = await bot.fetch_user(message.author.id)
+                        await user.send(
+                            f"🚫 {message.author.mention} You can only post **once every 7 days** in #referrals. "
+                            f"Your message has been deleted. You can post again on "
+                            f"{datetime.datetime.fromtimestamp((last_message[message.author.id] + datetime.timedelta(seconds=COOLDOWN_TIME)).timestamp()).strftime('%Y-%m-%d %H:%M:%S')} UTC."
+                        )
+                        return
+                    except discord.Forbidden:
+                        print("❌ ERROR: Bot lacks permission to delete messages in #referrals")
+                    except discord.HTTPException as e:
+                        print(f"❌ ERROR: Failed to delete message in #referrals: {e}")
 
-        last_message[message.author.id] = datetime.datetime.now()
-        messages_since_last_referral[message.author.id] = 0
-        if not has_higher_level_role:
+            last_message[message.author.id] = datetime.datetime.now()
+            messages_since_last_referral[message.author.id] = 0
             required_messages[message.author.id] = random.randint(25, 30)
 
-        data["last_message"] = {str(user_id): timestamp.isoformat() for user_id, timestamp in last_message.items()}
-        data["messages_since_last_referral"] = messages_since_last_referral
-        data["required_messages"] = required_messages
-        save_data(data)
+            data["last_message"] = {str(user_id): timestamp.isoformat() for user_id, timestamp in last_message.items()}
+            data["messages_since_last_referral"] = messages_since_last_referral
+            data["required_messages"] = required_messages
+            save_data(data)
 
-    if message.channel.type == discord.ChannelType.private:
-        await process_diamond_member_reply(message)
+        # Link filtering
+        allowed_role_name = "Credit Beginner"
+        has_allowed_role = discord.utils.get(member.roles, name=allowed_role_name)
 
-    if message.author.id in last_message:
-        messages_since_last_referral[message.author.id] += 1
+        link_pattern = r"\b(?:https?://|www\.)\S+\b|\b\S+\.(com|net|org|gov|edu|io|gg|xyz|me|co|uk|ca|us|au|info|biz|tv|tech|dev|app)\b"
 
-        if diamond_status_role and not diamond_role and not has_higher_level_role:
-            if messages_since_last_referral[message.author.id] >= required_messages.get(message.author.id, 50):
-                diamond_role = discord.utils.get(message.guild.roles, name="Diamond")
-                await message.author.add_roles(diamond_role)
-                user = await bot.fetch_user(message.author.id)
-                await user.send("You have regained the Diamond role!")
-
-        data["messages_since_last_referral"] = messages_since_last_referral
-        save_data(data)
+        if re.search(link_pattern, message.content) and not has_allowed_role:
+            try:
+                await message.delete()
+                await message.author.send(
+                    f"🚫 You are not allowed to post links in this server unless you have the **{allowed_role_name}** role. "
+                    "Please continue chatting in the server until you level up so you can gain access!"
+                )
+                return
+            except discord.Forbidden:
+                print("❌ ERROR: Bot lacks permission to delete messages")
+            except discord.HTTPException as e:
+                print(f"❌ ERROR: Failed to delete message: {e}")
 
     await bot.process_commands(message)
 
@@ -187,7 +215,7 @@ async def create_rules_message():
 
     rules_message_part1 = (
         "Keep your conversations civil.\n\n"
-        "No Vulgar Language.\n\n"
+        "No vulgar language.\n\n"
         "No offensive or inappropriate nicknames.\n\n"
         "No offensive or inappropriate Discord profiles.\n\n"
         "No fake identities or catfishing of any kind.\n\n"
@@ -197,6 +225,7 @@ async def create_rules_message():
         "Remain on topic and use channels correctly and appropriately. This includes being cautious when introducing conversations regarding controversial or sensitive topics.\n\n"
         "Spamming is strictly prohibited. Examples include spamming mentions of any user or group, sending excessive amounts of messages, emojis, links, videos, memes, pics, etc.\n\n"
         "Scamming is strictly prohibited. Examples of scams include phishing, fraud, etc.\n\n"
+        "Payed promotions of any kind is strictly prohibited. Examples include paying people to use your referral links, follow your socials, etc.\n\n"
         "NSFW content is strictly prohibited. Examples include text, images, or links featuring nudity, sex, hard violence, or other graphically disturbing content.\n\n"
         "All members must abide by the official Discord ToS and Guidelines.\n" # Doesnt add an extra space for aesthetics
         "https://discordapp.com/terms\n" # Doesnt add an extra space for aesthetics
@@ -204,7 +233,7 @@ async def create_rules_message():
         "The ability to post referral links is strictly limited to Verified Diamond Status Members. Referral posts are limited to once per week. A minimum level of engagement is required to retain Verified Diamond Member Status.\n\n"
         "The Credit Community promotes diversity and inclusivity. We expect your interactions in this community to be respectful and guided by these rules.\n\n"
         "Staff reserve the right to take action against any user if they deem the user’s actions to be damaging towards the community.\n\n"
-        "By joining The Credit Community, you are certifying/admitting that you are at least 18 years old.\n\n"
+        "By joining The Credit Community, you are certifying/admitting that you are at least 18 years old.\u200B\n\u200B\n"
     )
 
     rules_message_part2 = (
@@ -251,60 +280,62 @@ async def clear(ctx, user: discord.Member):
 # RSS Feed Task: This background task fetches the RSS feed every 5 minutes and posts new items
 # Store IDs or links of already posted items
 @tasks.loop(minutes=5)
-async def check_rss_feed():
+async def check_rss_feeds():
     try:
-        feed = feedparser.parse(RSS_FEED_URL)
-        if not feed.entries:
-            return
+        for channel_id, (feed_url, feed_name, embed_color) in RSS_FEEDS.items():
+            feed = feedparser.parse(feed_url)
+            if not feed.entries:
+                continue  # Skip if no new entries
 
-        channel = bot.get_channel(NEWS_CHANNEL_ID)
-        if not channel:
-            print(f"Could not find channel with ID {NEWS_CHANNEL_ID}")
-            return
+            discord_channel = bot.get_channel(channel_id)
+            if not discord_channel:
+                print(f"Could not find channel with ID {channel_id}")
+                continue
 
-        for entry in reversed(feed.entries):
-            unique_id = entry.get("id", entry.link)
-            if unique_id not in posted_entries:
-                posted_entries.add(unique_id)
+            for entry in reversed(feed.entries):  # Process from oldest to newest
+                unique_id = entry.get("id", entry.link)
 
-                # Save to disk so we don't lose this if the bot restarts
-                save_posted_entries(posted_entries)
+                # Check if this entry has already been posted
+                posted_entries = load_posted_entries()
+                if str(channel_id) in posted_entries and unique_id in posted_entries[str(channel_id)]:
+                    continue  # Skip already posted entry
 
-                # Extract info
+                # Extract info from the feed entry
                 title = entry.get("title", "No title")
                 link = entry.get("link", "")
 
-                # Attempt to get the raw summary
+                # Clean the summary: Start with raw, then decode HTML entities and strip HTML tags
                 raw_summary = entry.get("summary", "")
-                # 1) Decode HTML entities
                 decoded_summary = html.unescape(raw_summary)
-                # 2) Strip any HTML tags
                 cleaned_summary = BeautifulSoup(decoded_summary, "html.parser").get_text()
 
-                published = entry.get("published", "")
-
-                # Optional summary truncation if needed
+                # Truncate summary if it's too long
                 max_length = 2000
                 if len(cleaned_summary) > max_length:
                     cleaned_summary = cleaned_summary[:max_length] + "..."
 
-                # Create an Embed
+                # Create an Embed for Discord
                 embed = discord.Embed(
                     title=title,
                     url=link,
                     description=cleaned_summary,
-                    color=0x9B59B6
+                    color=embed_color #Different Color Per Channel
                 )
-                embed.set_author(name="Doctor Of Credit")
-                embed.set_footer(text=f"Published: {published}")
+                embed.set_author(name=feed_name)
+                embed.set_footer(text=f"Published: {entry.get('published', '')}")
 
-                await channel.send(embed=embed)
+                # Send the embed to the correct Discord channel
+                await discord_channel.send(embed=embed)
+
+                # Save this entry as posted
+                add_new_entry(channel_id, unique_id)
 
     except Exception as e:
-        print(f"Error fetching RSS feed: {e}")
+        print(f"Error fetching RSS feeds: {e}")
 
-@check_rss_feed.before_loop
-async def before_check_rss_feed():
+# Wait until bot is ready before starting the loop
+@check_rss_feeds.before_loop
+async def before_check_rss_feeds():
     await bot.wait_until_ready()
 
 # Load environment variables from .env
