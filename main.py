@@ -19,6 +19,7 @@ DISCORD_LOGS_CHANNEL_ID = 1105328983245082725
 NEEDS_HELP_CHANNEL_ID = 1105328983245082725
 COOLDOWN_TIME = 7*24*60*60
 GUILD_ID = 931760921825665034
+DELETED_LINKS_CHANNEL_ID = 1343112665840615446
 # RSS Feed Configurations
 RSS_FEEDS = {
     1337930618402770985: ("https://www.doctorofcredit.com/feed/", "Doctor Of Credit", 0x9B59B6),
@@ -92,7 +93,7 @@ async def on_ready():
     if not check_rss_feeds.is_running():  # Prevent multiple starts if bot reconnects
         check_rss_feeds.start()
 
-# (Merged Message Deletion For Referals & Link Filtering)
+# On message to handle Message Deletion for Referals & Link Filtering as well as Diamond Status tracking and role re-deployment after requirements are met again
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -144,6 +145,7 @@ async def on_message(message):
         allowed_role_name = "Credit Beginner"
         has_allowed_role = discord.utils.get(member.roles, name=allowed_role_name)
 
+        #Regex pattern used to filter.
         link_pattern = r"\b(?:https?://|www\.)\S+\b|\b\S+\.(com|net|org|gov|edu|io|gg|xyz|me|co|uk|ca|us|au|info|biz|tv|tech|dev|app)\b"
 
         if re.search(link_pattern, message.content) and not has_allowed_role:
@@ -153,11 +155,56 @@ async def on_message(message):
                     f"🚫 You are not allowed to post links in this server unless you have the **{allowed_role_name}** role. "
                     "Please continue chatting in the server until you level up so you can gain access!"
                 )
+                deleted_links_channel = bot.get_channel(DELETED_LINKS_CHANNEL_ID)
+                if deleted_links_channel:
+                    embed=discord.Embed(
+                        title="Malicious Link Detected",
+                        description=(
+                            f"**Author:** {message.author.mention}\n\n"
+                            f"**Channel:** {message.channel.mention}"
+                        ),
+                        color=0xFF0000,
+                        timestamp=datetime.datetime.now()
+                    )
+                
+                    embed.add_field(name="Message Content", value=message.content, inline=False)
+                    embed.set_author(name=str(message.author), icon_url=message.author.display_avatar.url)
+
+                    await deleted_links_channel.send(embed=embed)
+                else:
+                    print("❌ ERROR: Could not find the deleted links channel.")
+                
                 return
             except discord.Forbidden:
-                print("❌ ERROR: Bot lacks permission to delete messages")
+                print("❌ ERROR: Bot lacks permission to delete messages.")
             except discord.HTTPException as e:
                 print(f"❌ ERROR: Failed to delete message: {e}")
+
+    #Incrementing user's message counts to check if they are able to regain diamond status after losing it i.e. (not meeting message requirment criteria)
+    #Additionally, this code segment is only run AFTER the users message has been scanned to ensure it is safe for the server i.e. (user has talked enough to have the *Role name subject to change* role)
+    user_id = message.author.id
+
+    #Making sure there's a default so there is not keyerrors
+    if user_id not in messages_since_last_referral:
+        messages_since_last_referral[user_id] = 0
+    if user_id not in messages_since_last_referral:
+        required_messages[user_id] = random.randint(25, 30)
+
+    #Incrementing message count from all channels (excluding dms)
+    messages_since_last_referral[user_id] += 1
+
+    #Test cases to see if the user has reached the required messages
+    if messages_since_last_referral[user_id] >= required_messages[user_id]:
+        diamond_status_role = discord.utils.get(message.guild.roles, name="Diamond Status")
+
+        #If they do NOT have the Diamond Status role, add it back (this triggers on_member_update to handle the "Diamond" role or DM).
+        if diamond_status_role and diamond_status_role not in member.roles:
+            await member.add_roles(diamond_status_role)
+            print(f"[DEBUG] Gave Diamond Status back to {member}.")
+    
+    data["messages_since_last_referral"] = messages_since_last_referral
+    data["required_messages"] = required_messages
+    save_data(data)
 
     await bot.process_commands(message)
 
