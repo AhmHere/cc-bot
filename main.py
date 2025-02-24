@@ -182,29 +182,32 @@ async def on_message(message):
 
     #Incrementing user's message counts to check if they are able to regain diamond status after losing it i.e. (not meeting message requirment criteria)
     #Additionally, this code segment is only run AFTER the users message has been scanned to ensure it is safe for the server i.e. (user has talked enough to have the *Role name subject to change* role)
-    user_id = message.author.id
+    # Only track messages if the user has the "Diamond" role
+    diamond_role = discord.utils.get(message.guild.roles, name="Diamond")
+    if diamond_role in member.roles:
+        user_id = message.author.id
 
-    #Making sure there's a default so there is not keyerrors
-    if user_id not in messages_since_last_referral:
-        messages_since_last_referral[user_id] = 0
-    if user_id not in messages_since_last_referral:
-        required_messages[user_id] = random.randint(25, 30)
+        #Making sure there's a default so there is not keyerrors
+        if user_id not in messages_since_last_referral:
+            messages_since_last_referral[user_id] = 0
+        if user_id not in required_messages:
+            required_messages[user_id] = random.randint(25, 30)
 
-    #Incrementing message count from all channels (excluding dms)
-    messages_since_last_referral[user_id] += 1
+        #Incrementing message count from all channels (excluding dms)
+        messages_since_last_referral[user_id] += 1
 
-    #Test cases to see if the user has reached the required messages
-    if messages_since_last_referral[user_id] >= required_messages[user_id]:
-        diamond_status_role = discord.utils.get(message.guild.roles, name="Diamond Status")
+        #Test cases to see if the user has reached the required messages
+        if messages_since_last_referral[user_id] >= required_messages[user_id]:
+            diamond_status_role = discord.utils.get(message.guild.roles, name="Diamond Status")
 
-        #If they do NOT have the Diamond Status role, add it back (this triggers on_member_update to handle the "Diamond" role or DM).
-        if diamond_status_role and diamond_status_role not in member.roles:
-            await member.add_roles(diamond_status_role)
-            print(f"[DEBUG] Gave Diamond Status back to {member}.")
+            #If they do NOT have the Diamond Status role, add it back (this triggers on_member_update to handle the "Diamond" role or DM).
+            if diamond_status_role and diamond_status_role not in member.roles:
+                await member.add_roles(diamond_status_role)
+                print(f"[DEBUG] Gave Diamond Status back to {member}.")
     
-    data["messages_since_last_referral"] = messages_since_last_referral
-    data["required_messages"] = required_messages
-    save_data(data)
+        data["messages_since_last_referral"] = messages_since_last_referral
+        data["required_messages"] = required_messages
+        save_data(data)
 
     await bot.process_commands(message)
 
