@@ -11,7 +11,7 @@ import html
 from bs4 import BeautifulSoup
 import re
 
-bot = commands.Bot(command_prefix='!', intents=discord.Intents.all())
+bot = commands.Bot(command_prefix='+', intents=discord.Intents.all())
 
 RULES_CHANNEL_ID = 932447065370398791
 REFERRALS_CHANNEL_ID = 1105204207172190368
