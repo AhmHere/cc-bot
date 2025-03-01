@@ -1,7 +1,13 @@
+<div align="center">
+  <!-- <img src="https://github.com/user-attachments/assets/704e1568-5c42-4133-835b-2075fef6813b" width="300"/> -->
+<img src="https://github.com/user-attachments/assets/704e1568-5c42-4133-835b-2075fef6813b" alt="Community Bot Logo" width="800"/>
+</div>
+
 # Credit Community Discord Server Bot
 
+
 ## Overview
-This is a discord bot designed to be used for the Credit Community Discord server, servicing 7000 users and counting. The bot does various things 
+The Credit Community Bot is a comprehensive Discord bot designed for the Credit Community Discord server, which currently serves over 7,000 users. It automates community management tasks, ensuring smooth operations, user verification, and content moderation while also delivering timely updates and managing premium membership features.
 
 ## Application Features
 - **Referral Channel Management**: The bot tracks and enforces a 7-day cooldown period between each user's posts in the referral channel. Users who attempt to post more frequently will have their messages deleted, and they will receive a warning message.
