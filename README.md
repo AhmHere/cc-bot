@@ -7,6 +7,7 @@
     <img alt="Discord" src="https://img.shields.io/badge/Discord%20-%20blue?style=flat&logo=discord&label=CC&color=%237933FF">
   </a>
 </p>
+
 # Credit Community Discord Server Bot
 
 
