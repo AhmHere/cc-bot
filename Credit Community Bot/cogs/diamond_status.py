@@ -1,7 +1,7 @@
 ﻿# cogs/diamond_status.py
 
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import datetime
 import random
 import re
@@ -21,10 +21,12 @@ from config import (
 from utils import safe_delete, safe_dm
 
 class DiamondStatusCog(commands.Cog):
-    """Manages Diamond Status, referral cooldowns, link filtering, and DM confirmations."""
+    """Manages Diamond Status, referral cooldowns, link filtering, and DM confirmations, and removes roles for inactivity."""
 
     def __init__(self, bot):
         self.bot = bot
+        # Start the inactivity check task (runs every 24 hours)
+        self.check_inactivity.start()
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -43,11 +45,11 @@ class DiamondStatusCog(commands.Cog):
 
         # Access shared globals from bot
         globals_data = self.bot.globals_data
+        user_id = message.author.id
 
         # 1. Referral channel handling
         if message.channel.id == REFERRALS_CHANNEL_ID:
             is_mod = any(r.name == MODERATOR_ROLE_NAME for r in member.roles)
-            user_id = message.author.id
             if not is_mod and user_id in globals_data['last_message']:
                 elapsed = (datetime.datetime.now() - globals_data['last_message'][user_id]).total_seconds()
                 if elapsed < COOLDOWN_TIME:
@@ -59,9 +61,17 @@ class DiamondStatusCog(commands.Cog):
                         f"{(globals_data['last_message'][user_id] + datetime.timedelta(seconds=COOLDOWN_TIME)).strftime('%Y-%m-%d %H:%M:%S')} UTC."
                     )
                     return
+            # Update referral post timestamp and reset message count/threshold
             globals_data['last_message'][user_id] = datetime.datetime.now()
             globals_data['messages_since_last_referral'][user_id] = 0
             globals_data['required_messages'][user_id] = random.randint(25, 30)
+
+            # **New Check:** Ensure the user is active enough (has Diamond Status)
+            diamond_status_role = get(member.guild.roles, name=DIAMOND_STATUS_ROLE_NAME)
+            if diamond_status_role not in member.roles:
+                await safe_delete(message)
+                await safe_dm(member, "🚫 You are not active enough to post in #referrals. Keep chatting in the server to earn Diamond Status!")
+                return
 
         # 2. Link filtering for users without the allowed role
         if not get(member.roles, name=ALLOWED_ROLE_NAME):
@@ -76,7 +86,7 @@ class DiamondStatusCog(commands.Cog):
                 await log_deleted_link(message)
                 return
 
-        # 3. Diamond Status message counting
+        # 3. Diamond Status message counting for activity tracking
         user_id = message.author.id
         globals_data['messages_since_last_referral'].setdefault(user_id, 0)
         globals_data['required_messages'].setdefault(user_id, random.randint(25, 30))
@@ -97,7 +107,7 @@ class DiamondStatusCog(commands.Cog):
         diamond_status_role = get(after.guild.roles, name=DIAMOND_STATUS_ROLE_NAME)
         diamond_role = get(after.guild.roles, name=DIAMOND_ROLE_NAME)
 
-        # Diamond Status added
+        # When Diamond Status is added, also add Diamond role and send DM confirmation
         if diamond_status_role in after_roles and diamond_status_role not in before_roles:
             if diamond_role and diamond_role not in after_roles:
                 await after.add_roles(diamond_role)
@@ -110,7 +120,7 @@ class DiamondStatusCog(commands.Cog):
             )
             globals_data['confirmation_sent'][after.id] = datetime.datetime.now()
 
-        # Diamond Status removed
+        # If Diamond Status is removed, also remove Diamond role
         if diamond_status_role in before_roles and diamond_status_role not in after_roles:
             if diamond_role in after_roles:
                 await after.remove_roles(diamond_role)
@@ -142,6 +152,24 @@ class DiamondStatusCog(commands.Cog):
                 )
                 del globals_data['confirmation_sent'][user.id]
         elif message.content.lower() == "help":
+            HELP_COOLDOWN = 300  # Cooldown in seconds (5 minutes)
+            now = datetime.datetime.now()
+    
+            # Ensure the 'last_help' dictionary exists in globals_data
+            if 'last_help' not in globals_data:
+                globals_data['last_help'] = {}
+    
+            # Check if the user is on cooldown
+            if user.id in globals_data['last_help']:
+                elapsed = (now - globals_data['last_help'][user.id]).total_seconds()
+                if elapsed < HELP_COOLDOWN:
+                    remaining = int(HELP_COOLDOWN - elapsed)
+                    await safe_dm(member, f"Your help request is on cooldown. Please wait {remaining} more seconds before requesting help again.")
+                    return
+    
+            # Update the last help timestamp
+            globals_data['last_help'][user.id] = now
+
             help_role = get(guild.roles, name=HELP_NEEDED_ROLE_NAME)
             if help_role:
                 await member.add_roles(help_role)
@@ -151,6 +179,35 @@ class DiamondStatusCog(commands.Cog):
                 await logs_channel.send(
                     f"{member.mention} needs help! {mod_role.mention if mod_role else ''}"
                 )
+
+    @tasks.loop(hours=24)
+    async def check_inactivity(self):
+        """Periodically remove Diamond Status and Diamond roles from users inactive beyond a threshold (TBD)."""
+        now = datetime.datetime.now()
+        # Defined inactivity threshold
+        inactivity_threshold = 14 * 24 * 60 * 60  # 14 days in seconds
+        guild = self.bot.get_guild(GUILD_ID)
+        if not guild:
+            return
+        
+        for user_id, last_msg_time in self.bot.globals_data.get('last_message', {}).items():
+            if (now - last_msg_time).total_seconds() > inactivity_threshold:
+                member = guild.get_member(user_id)
+                if member:
+                    diamond_status_role = get(member.guild.roles, name=DIAMOND_STATUS_ROLE_NAME)
+                    diamond_role = get(member.guild.roles, name=DIAMOND_ROLE_NAME)
+                    if diamond_status_role in member.roles:
+                        try:
+                            await member.remove_roles(diamond_status_role)
+                            print(f"[INFO] Removed Diamond Status from {member} due to inactivity.")
+                        except Exception as e:
+                            print(f"[ERROR] Could not remove Diamond Status from {member}: {e}")
+                    if diamond_role in member.roles:
+                        try:
+                            await member.remove_roles(diamond_role)
+                            print(f"[INFO] Removed Diamond role from {member} due to inactivity.")
+                        except Exception as e:
+                            print(f"[ERROR] Could not remove Diamond role from {member}: {e}")
 
 async def setup(bot):
     await bot.add_cog(DiamondStatusCog(bot))

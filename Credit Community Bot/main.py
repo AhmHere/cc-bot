@@ -37,6 +37,8 @@ async def on_ready():
 
     guild = discord.Object(id=GUILD_ID)
     try:
+        # Copy global commands to the guild, then sync.
+        await bot.tree.sync()
         await bot.tree.sync(guild=guild)
         print(f"[INFO] Command tree synced for guild: {GUILD_ID}")
         cmds = bot.tree.get_commands(guild=guild)
@@ -55,7 +57,8 @@ async def main():
         'cogs.diamond_status',
         'cogs.rules',
         'cogs.admin',
-        'cogs.commands'
+        'cogs.commands',
+        'cogs.datapoints'
     ]
     # Load extensions asynchronously
     for ext in initial_extensions:

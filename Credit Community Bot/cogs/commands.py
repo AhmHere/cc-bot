@@ -7,6 +7,7 @@ from discord import app_commands
 class TransferCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        print("[DEBUG] CommandsCog loaded – slash command should be registered.")
 
     @app_commands.command(name="transfer_partners", description="Sends transfer partner matrix")
     async def transfer(self, interaction: discord.Interaction):

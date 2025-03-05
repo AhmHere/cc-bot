@@ -18,6 +18,9 @@ secrets/
 *.user
 *.userosscache
 *.sln.docstates
+*.sln
+*.pyproj
+*.pythonproject
 
 # Distribution / packaging
 .Python
