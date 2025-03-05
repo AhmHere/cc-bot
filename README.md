@@ -2,7 +2,11 @@
   <!-- <img src="https://github.com/user-attachments/assets/704e1568-5c42-4133-835b-2075fef6813b" width="300"/> -->
 <img src="https://github.com/user-attachments/assets/704e1568-5c42-4133-835b-2075fef6813b" alt="Community Bot Logo" width="800"/>
 </div>
-
+<p align="center">
+  <a href="https://discord.gg/pZ2tfyAxqd">
+    <img alt="Discord" src="https://img.shields.io/badge/Discord%20-%20blue?style=flat&logo=discord&label=CC&color=%237933FF">
+  </a>
+</p>
 # Credit Community Discord Server Bot
 
 
