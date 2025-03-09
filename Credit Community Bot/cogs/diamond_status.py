@@ -6,6 +6,7 @@ import datetime
 import random
 import re
 from discord.utils import get
+import urllib.parse
 
 from config import (
     REFERRALS_CHANNEL_ID,
@@ -74,9 +75,17 @@ class DiamondStatusCog(commands.Cog):
                 return
 
         # 2. Link filtering for users without the allowed role
+
+        # Step 1: Decode percent-encoded characters in the message
+        decoded_message = urllib.parse.unquote(message.content)
+
+        # Step 2: Normalize text (remove spaces and line breaks)
+        cleaned_message = decoded_message.replace("\n", "").replace(" ", "")
+
         if not get(member.roles, name=ALLOWED_ROLE_NAME):
-            link_pattern = r"\b(?:https?://|www\.)\S+\b|\b\S+\.(com|net|org|gov|edu|io|gg|xyz|me|co|uk|ca|us|au|info|biz|tv|tech|dev|app)\b"
-            if re.search(link_pattern, message.content):
+            # Step 3: Enhanced Regex for detecting links (normal + obfuscated)
+            link_pattern = r"\b(?:https?|hxxps?|ftp):\/\/[^\s/$.?#].[^\s]*|\b(?:[a-z0-9-]+\.){1,}[a-z]{2,}"
+            if re.search(link_pattern, cleaned_message, re.IGNORECASE):
                 await safe_delete(message)
                 await safe_dm(
                     member,

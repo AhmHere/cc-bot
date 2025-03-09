@@ -6,6 +6,12 @@ __pycache__/
 # C extensions
 *.so
 
+#Ignore Bot Env
+CreditCommunityBotEnv/
+
+# Ignore Visual Studio Python project file
+Credit Community Bot.pyproj
+
 # Ignore a folder named "secrets"
 secrets/
 
