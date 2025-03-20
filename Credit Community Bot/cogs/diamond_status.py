@@ -69,7 +69,8 @@ class DiamondStatusCog(commands.Cog):
 
             # **New Check:** Ensure the user is active enough (has Diamond Status)
             diamond_status_role = get(member.guild.roles, name=DIAMOND_STATUS_ROLE_NAME)
-            if diamond_status_role not in member.roles:
+            og_role = get(member.guild.roles, name="OG") # Fetch the OG role
+            if diamond_status_role not in member.roles and og_role not in member.roles:
                 await safe_delete(message)
                 await safe_dm(member, "🚫 You are not active enough to post in #referrals. Keep chatting in the server to earn Diamond Status!")
                 return
@@ -84,7 +85,7 @@ class DiamondStatusCog(commands.Cog):
 
         if not get(member.roles, name=ALLOWED_ROLE_NAME):
             # Step 3: Enhanced Regex for detecting links (normal + obfuscated)
-            link_pattern = r"\b(?:https?|hxxps?|ftp):\/\/[^\s/$.?#].[^\s]*|\b(?:[a-z0-9-]+\.){1,}[a-z]{2,}"
+            link_pattern = r"\b(?:https?|hxxps?|ftp):\/\/[^\s/$.?#].[^\s]*|\b[a-zA-Z0-9.-]+\.(?:com|net|org|gov|edu|io|gg|xyz|me|co|uk|ca|us|au|info|biz|tv|tech|dev|app)\b"
             if re.search(link_pattern, cleaned_message, re.IGNORECASE):
                 await safe_delete(message)
                 await safe_dm(

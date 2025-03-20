@@ -27,4 +27,5 @@ RSS_FEEDS = {
     1337930618402770985: ("https://www.doctorofcredit.com/feed/", "Doctor Of Credit", 0x9B59B6),
     1338649589191934042: ("https://dannydealguru.com/feed/", "Danny The Deal Guru", 0x3498DB),
     1338649732771221624: ("https://onemileatatime.com/feed/", "One Mile At A Time", 0xE74C3C),
+    1352217712025145385: ("https://upgradedpoints.com/feed/", "Upgraded Points", 0xFEE75C),
 }
