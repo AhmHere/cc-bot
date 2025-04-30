@@ -15,7 +15,7 @@ DIAMOND_STATUS_ROLE_NAME = "Diamond Status"
 DIAMOND_ROLE_NAME = "Diamond"
 MODERATOR_ROLE_NAME = "Moderator"
 HELP_NEEDED_ROLE_NAME = "Help"
-ALLOWED_ROLE_NAME = "Credit Beginner"
+MINIMUM_ALLOWED_ROLE_NAME = "Credit Beginner"
 
 # Other constants
 COOLDOWN_TIME = 7 * 24 * 60 * 60  # 7 days in seconds
@@ -28,4 +28,5 @@ RSS_FEEDS = {
     1338649589191934042: ("https://dannydealguru.com/feed/", "Danny The Deal Guru", 0x3498DB),
     1338649732771221624: ("https://onemileatatime.com/feed/", "One Mile At A Time", 0xE74C3C),
     1352217712025145385: ("https://upgradedpoints.com/feed/", "Upgraded Points", 0xFEE75C),
+    1363016656963502100: ("https://viewfromthewing.com/feed/", "View From The Wing", 0x2E8B57),
 }

@@ -11,7 +11,7 @@ import urllib.parse
 from config import (
     REFERRALS_CHANNEL_ID,
     MODERATOR_ROLE_NAME,
-    ALLOWED_ROLE_NAME,
+    MINIMUM_ALLOWED_ROLE_NAME,
     DIAMOND_STATUS_ROLE_NAME,
     DIAMOND_ROLE_NAME,
     HELP_NEEDED_ROLE_NAME,
@@ -83,14 +83,19 @@ class DiamondStatusCog(commands.Cog):
         # Step 2: Normalize text (remove spaces and line breaks)
         cleaned_message = decoded_message.replace("\n", "").replace(" ", "")
 
-        if not get(member.roles, name=ALLOWED_ROLE_NAME):
+        # Get the minimum allowed role from the guild
+        allowed_role = get(message.guild.roles, name=MINIMUM_ALLOWED_ROLE_NAME)
+        # Check if user has a role at or above the allowed role
+        has_allowed_role = any(role.position >= allowed_role.position for role in member.roles)
+
+        if not has_allowed_role:
             # Step 3: Enhanced Regex for detecting links (normal + obfuscated)
             link_pattern = r"\b(?:https?|hxxps?|ftp):\/\/[^\s/$.?#].[^\s]*|\b[a-zA-Z0-9.-]+\.(?:com|net|org|gov|edu|io|gg|xyz|me|co|uk|ca|us|au|info|biz|tv|tech|dev|app)\b"
             if re.search(link_pattern, cleaned_message, re.IGNORECASE):
                 await safe_delete(message)
                 await safe_dm(
                     member,
-                    f"🚫 You are not allowed to post links in this server unless you have the **{ALLOWED_ROLE_NAME}** role. Please keep chatting and leveling up!"
+                    f"🚫 You are not allowed to post links in this server unless you have the **{MINIMUM_ALLOWED_ROLE_NAME}** role. Please keep chatting and leveling up!"
                 )
                 from utils import log_deleted_link
                 await log_deleted_link(message)
