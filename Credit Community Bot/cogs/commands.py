@@ -11,7 +11,7 @@ class TransferCog(commands.Cog):
 
     @app_commands.command(name="transfer_partners", description="Sends transfer partner matrix")
     async def transfer(self, interaction: discord.Interaction):
-        image_url = "https://images.squarespace-cdn.com/content/v1/5ac24ac545776ed72e3f4f68/771803d5-2225-4ee5-bc38-865b1fe804b1/Transfer-Partner-Matrix-AT101.png?format=1500w"
+        image_url = "https://images.squarespace-cdn.com/content/v1/5ac24ac545776ed72e3f4f68/6535646d-5e09-4f7f-a071-f983560c8fc0/Transfer-Partner-Matrix-AT101.png?format=2500w"
 
         embed = discord.Embed(
             title="Transfer Partners",
