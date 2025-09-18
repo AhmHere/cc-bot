@@ -14,17 +14,26 @@ def load_bot_data():
             "last_message": {},
             "messages_since_last_referral": {},
             "required_messages": {},
-            "confirmation_sent": {}
+            "confirmation_sent": {},
+            "last_activity": {},
         }
     try:
         with open(DATA_FILE, "r") as f:
-            return json.load(f)
+            data = json.load(f)
+            # ✅ ensure keys exist even for older files
+            data.setdefault("last_message", {})
+            data.setdefault("messages_since_last_referral", {})
+            data.setdefault("required_messages", {})
+            data.setdefault("confirmation_sent", {})
+            data.setdefault("last_activity", {})
+            return data
     except json.JSONDecodeError:
         return {
             "last_message": {},
             "messages_since_last_referral": {},
             "required_messages": {},
-            "confirmation_sent": {}
+            "confirmation_sent": {},
+            "last_activity": {},
         }
 
 def save_bot_data(data_dict):
@@ -55,6 +64,29 @@ def sync_globals_from_data(data_dict, globals_dict):
         except ValueError:
             continue
 
+    # last_activity
+    globals_dict.setdefault('last_activity', {})
+    globals_dict['last_activity'].clear()
+    for user_id_str, time_str in data_dict.get("last_activity", {}).items():
+        try:
+            uid = int(user_id_str)
+        except ValueError:
+            continue
+        dt = None
+        if isinstance(time_str, str):
+            try:
+                dt = datetime.datetime.fromisoformat(time_str)
+            except Exception:
+                dt = None
+        if dt is None:
+            # optional fallback if older files used epoch seconds
+            try:
+                dt = datetime.datetime.fromtimestamp(float(time_str))
+            except Exception:
+                dt = None
+        if dt is not None:
+            globals_dict['last_activity'][uid] = dt
+
 def sync_data_from_globals(globals_dict):
     """
     Convert in-memory data back to a structure for saving.
@@ -64,6 +96,10 @@ def sync_data_from_globals(globals_dict):
         "messages_since_last_referral": globals_dict['messages_since_last_referral'],
         "required_messages": globals_dict['required_messages'],
         "confirmation_sent": {str(k): v.isoformat() for k, v in globals_dict['confirmation_sent'].items()},
+        "last_activity": {
+            str(k): v.isoformat() for k, v in globals_dict.get("last_activity", {}).items()
+            if isinstance(v, datetime.datetime)
+        },
     }
 
 def load_posted_entries():
