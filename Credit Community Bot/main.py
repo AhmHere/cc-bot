@@ -18,7 +18,9 @@ globals_data = {
     "last_message": {},
     "messages_since_last_referral": {},
     "required_messages": {},
-    "confirmation_sent": {}
+    "confirmation_sent": {},
+    "last_help": {},
+    "last_activity": {},
 }
 # Load data from file and sync into globals_data
 data_dict = load_bot_data()
